@@ -1,0 +1,81 @@
+setwd('E:/GL_20 - RBWM/TD/Twitter Data')
+
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+library("plyr")
+library("ggplot2")
+library("stringr")
+library("slam")
+library("topicmodels")
+
+x <- read.csv('Clean Data_v1.csv', stringsAsFactors = FALSE)
+
+x$Tweets = gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", x$Tweets)
+x$Tweets = gsub("@\\w+", "", x$Tweets)
+x$Tweets = gsub("[[:punct:]]", "", x$Tweets)
+x$Tweets = gsub("[[:digit:]]", "", x$Tweets)
+x$Tweets = gsub("http\\w+", "", x$Tweets)
+x$Tweets = gsub("[ \t]{2,}", "", x$Tweets)
+x$Tweets = gsub("^\\s+|\\s+$", "", x$Tweets)
+x$Tweets = gsub("amp", "", x$Tweets)
+
+
+y <- Corpus(VectorSource(x$Tweets))
+y <- tm_map(y, content_transformer(tolower))
+y <- tm_map(y, removePunctuation)
+y <- tm_map(y, PlainTextDocument)
+y <- tm_map(y, removeWords, stopwords('english'))
+y <- tm_map(y, removeWords, stopwords('SMART'))
+y <- tm_map(y, stemDocument)
+y <- tm_map(y, removeWords, c("please","your","email","today","number","account","ive","today","can","now","will","just")) 
+
+
+tdm <- DocumentTermMatrix(y)
+
+term_tfidf <- tapply(tdm$v/row_sums(tdm)[tdm$i], tdm$j, mean) * log2(nDocs(tdm)/col_sums(tdm > 0))
+summary(term_tfidf)
+tdm <- tdm[,term_tfidf >= 0.1]
+tdm <- tdm[row_sums(tdm) > 0,]
+summary(col_sums(tdm))
+
+k = 10;#number of topics
+SEED = 4590; # number of tweets used
+CSC_TM <-list(VEM = LDA(tdm, k = k, control = list(seed = SEED)),VEM_fixed = LDA(tdm, k = k,control = list(estimate.alpha = FALSE, seed = SEED)),Gibbs = LDA(tdm, k = k, method = "Gibbs",control = list(seed = SEED, burnin = 1000,thin = 100, iter = 1000)),CTM = CTM(tdm, k = k,control = list(seed = SEED,var = list(tol = 10^-4), em = list(tol = 10^-3))))
+
+sapply(CSC_TM[1:2], slot, "alpha")
+sapply(CSC_TM, function(x) mean(apply(posterior(x)$topics, 1, function(z) - sum(z * log(z)))))
+Topic <- topics(CSC_TM[["VEM"]], 1)
+Terms <- terms(CSC_TM[["VEM"]], 15)
+Terms
+tm_df<-data.frame(Terms)
+as.vector(tm_df$Topic.1)
+
+tp1<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.1)))
+tp2<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.2)))
+tp3<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.3)))
+tp4<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.4)))
+tp5<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.5)))
+tp6<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.6)))
+tp7<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.7)))
+tp8<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.8)))
+tp9<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.9)))
+tp10<-ldply(y, function(x) str_count(x, as.vector(tm_df$Topic.10)))
+
+tp1$tp1_sm <- rowSums( tp1[,2:16] )
+tp2$tp2_sm <- rowSums( tp2[,2:16] )
+tp3$tp3_sm <- rowSums( tp3[,2:16] )
+tp4$tp4_sm <- rowSums( tp4[,2:16] )
+tp5$tp5_sm <- rowSums( tp5[,2:16] )
+tp6$tp6_sm <- rowSums( tp6[,2:16] )
+tp7$tp7_sm <- rowSums( tp7[,2:16] )
+tp8$tp8_sm <- rowSums( tp8[,2:16] )
+tp9$tp9_sm <- rowSums( tp9[,2:16] )
+tp10$tp10_sm <- rowSums( tp10[,2:16] )
+
+
+fl=cbind(x$Tweets,tp1,tp2,tp3,tp4,tp5,tp6,tp7,tp8,tp9,tp10)
+topicdata <- fl[c("x$Tweets","tp1_sm","tp2_sm","tp3_sm","tp4_sm","tp5_sm","tp6_sm","tp7_sm","tp8_sm","tp9_sm","tp10_sm")]
+
+write.csv(topicdata, file = "E:/GL_20 - RBWM/TD/Twitter Data/topicdata.csv", row.names = FALSE)
