@@ -1,0 +1,42 @@
+setwd('E:/R_senti')
+
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+library("wordcloud2")
+
+
+x <- read.csv('Clean Data_v1.csv', stringsAsFactors = FALSE)
+
+x$Tweets = gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", x$Tweets)
+x$Tweets = gsub("@\\w+", "", x$Tweets)
+x$Tweets = gsub("[[:punct:]]", "", x$Tweets)
+x$Tweets = gsub("[[:digit:]]", "", x$Tweets)
+x$Tweets = gsub("http\\w+", "", x$Tweets)
+x$Tweets = gsub("[ \t]{2,}", "", x$Tweets)
+x$Tweets = gsub("^\\s+|\\s+$", "", x$Tweets)
+x$Tweets = gsub("amp", "", x$Tweets)
+
+
+y <- Corpus(VectorSource(x$Tweets))
+y <- tm_map(y, content_transformer(tolower))
+y <- tm_map(y, removePunctuation)
+y <- tm_map(y, PlainTextDocument)
+y <- tm_map(y, removeWords, stopwords('english'))
+y <- tm_map(y, stemDocument)
+
+y <- tm_map(y, removeWords, c("please","your","email","today","number","account","ive","today","can","now","will","just")) 
+
+dtm <- TermDocumentMatrix(y)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+
+wordcloud2(data = d)
+wordcloud2(d, size=1.6, color='random-light', backgroundColor="black")
+wordcloud2(d, figPath = "logo_1.png", size = 1.5, color = "red", backgroundColor="white")
+wordcloud2(d, figPath = "nm.png", size = 2, color = "red", backgroundColor="white")
+wordcloud2(d, figPath = "download.png", size = 1.5, color = "red", backgroundColor="white")
+
