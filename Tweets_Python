@@ -1,0 +1,37 @@
+
+from tweepy import Stream
+from tweepy import OAuthHandler
+from tweepy.streaming import StreamListener
+
+ckey='******************************'
+csecret='********************************************'
+atoken='**************************************'
+asecret='******************************'
+
+class listener(StreamListener):
+    def on_data(self,data):
+        try:
+            #print data
+            tweet=data.split(',"text":"')[1].split('","source')[0]
+            print tweet
+            #st_id=data.split(',"user":"')[1].split('","id_str')[0]
+            #print st_id
+            saveFile=open('cjg1_v5.csv','a')
+            saveFile.write(data)
+            saveFile.write('\n')
+
+            #saveThis=str(time.time())+'::'+tweet
+            saveFile=open('cjg2_v5.csv','a')
+            saveFile.write(tweet)
+            saveFile.write('\n')
+            saveFile.close()
+            return True
+        except BaseException, e:
+            print 'failed on data,',str(e)
+            time.sleep(5)
+    def on_error(self,status):
+        print status
+auth=OAuthHandler(ckey,csecret)
+auth.set_access_token(atoken,asecret)
+twitterStream=Stream(auth,listener())
+twitterStream.filter(track=["****UK","****_UK","#****UK","@****UK","@****_UK","#****_UK","@*****_UK_Help","@*****_Expat","@*****UKBusiness"],languages=["en"])
