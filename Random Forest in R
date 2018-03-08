@@ -1,0 +1,48 @@
+library(randomForest)
+loan_model_09<-dbGetQuery(conn,"select * from sal_staging.model_data_loan_09_fn")
+loan_model_06<-dbGetQuery(conn,"select * from sal_staging.model_data_loan_fn_06")
+summary(loan_model_09$event)summary(all_loan$event)
+loan_model_09$event = factor(loan_model_09$event)
+loan_model_06$event = factor(loan_model_06$event)
+all_loan<-rbind(loan_model_09,loan_model_06)
+all_loan[is.na(all_loan)]<-0
+varNames <- names(all_loan)
+varNames <- varNames[!varNames %in% c("event","cust_num")]
+head(varNames)
+varNames1 <- paste(varNames, collapse = "+")
+rf.form <- as.formula(paste("event", varNames1, sep = " ~ "))
+
+plot(cross.sell.rf)
+varImpPlot(cross.sell.rf,           sort = T,           main="Variable Importance",           n.var=5)
+cross.sell.rf <- randomForest(rf.form,                              all_loan,                              mtry=20,                              ntree=20,                              importance=T,                              do.trace=T)
+var.imp <- data.frame(importance(cross.sell.rf,                                 type=2))
+var.imp$Variables <- row.names(var.imp)
+var.imp[order(var.imp$MeanDecreaseGini,decreasing = T),]
+
+
+#***********************   Selecting key variables: 2nd Step ********************************/  
+all_loan_f1<-subset(all_loan, select = c(list of variables))
+varNames <- names(all_loan_f1)
+varNames <- varNames[!varNames %in% c("event","cust_num")]
+head(varNames)
+varNames1 <- paste(varNames, collapse = "+")
+rf.form <- as.formula(paste("event", varNames1, sep = " ~ "))
+cross.sell.rf <- randomForest(rf.form,                              all_loan_f1,                              mtry=20,                              ntree=100,                              importance=T,                              do.trace=T)
+#plot(cross.sell.rf)
+varImpPlot(cross.sell.rf,           sort = T,           main="Variable Importance",           n.var=5)
+var.imp <- data.frame(importance(cross.sell.rf,                                 type=2))
+var.imp$Variables <- row.names(var.imp)var.imp[order(var.imp$MeanDecreaseGini,decreasing = T),]
+all_loan_f1$predicted.response <- predict(cross.sell.rf,all_loan_f1)
+library(e1071)
+library(caret)
+confusionMatrix(data=all_loan_f1$predicted.response,                reference=all_loan_f1$event,                positive='1')
+library(ROCR)#Evaluate the performance of the random forest for classification.
+tmp <- predict(cross.sell.rf, all_loan_v1[-c(1)], "prob")   
+adc1<-cbind(all_loan_v1,tmp)
+
+AUC <- function(pred,depvar){  require("ROCR")  p   <- prediction(as.numeric(pred),depvar)  auc <- performance(p,"auc")  auc <- unlist(slot(auc, "y.values"))  return(auc)}
+AUC(all_loan_f1$predicted.response, all_loan_f1$event)#0.9434508
+KS <- function(pred,depvar){  require("ROCR")  p   <- prediction(as.numeric(pred),depvar)  perf <- performance(p, "tpr", "fpr")  ks <- max(attr(perf, "y.values")[[1]] - (attr(perf, "x.values")[[1]]))  return(ks)}
+KS(all_loan_f1$predicted.response, all_loan_f1$event)#0.8869016
+lift <- function(depvar, predcol, groups=10) {  if(!require(dplyr)){    install.packages("dplyr")    library(dplyr)}  if(is.factor(depvar)) depvar <- as.integer(as.character(depvar))  if(is.factor(predcol)) predcol <- as.integer(as.character(predcol))  helper = data.frame(cbind(depvar, predcol))  helper[,"bucket"] = ntile(helper[,"predcol"], groups)  gaintable = helper %>% group_by(bucket)  %>%    summarise_at(vars(depvar), funs(total = n(),                                    totalresp=sum(., na.rm = TRUE))) %>%    mutate(Cumresp = cumsum(totalresp),           Gain=Cumresp/sum(totalresp)*100,           Cumlift=Gain/(bucket*(100/groups)))  return(gaintable)}
+dt = lift(all_loan_f1$event , all_loan_f1$predicted.response, groups = 10)
