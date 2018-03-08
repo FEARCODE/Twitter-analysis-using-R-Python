@@ -1,0 +1,81 @@
+main_data<-dbGetQuery(conn,"select * from sal_staging.cust_all_loan_model_feb17_risk1")
+main_data1<-subset(main_data, select = c('List of variables'))
+drops <- c(list of bureaue variables)
+main_data2<- main_data1[,!names(main_data1) %in% drops]
+#....................... Bureaue Variables Treatment ............................................
+bureaue_data<-subset(main_data1, select = c(list of bureaue variables))
+impute1<-function(x){  return(ifelse(x==-999,median(x[x>-996], na.rm = TRUE),ifelse(x<=-996 & x>=-998,0,x)))}
+bureaue_data1 <- as.data.frame(apply(bureaue_data,2,impute1))
+final_data<-cbind(main_data2,bureaue_data1)
+final_data$target_var = factor(final_data$target_var)
+final_data[is.na(final_data)]<-0
+summary(final_data1)
+final_data$ns_tot_save_bal<-ifelse(final_data$ns_tot_save_bal<0,0,final_data$ns_tot_save_bal)
+normalize <- function(x,na.rm = TRUE) {  return ((x - min(x,na.rm = TRUE)) / (max(x,na.rm = TRUE) - min(x,na.rm = TRUE)))}
+final_data1 <- as.data.frame(lapply(final_data[3:77], normalize))
+info <- final_data[c("cust_num","target_var")]
+final_data2<-cbind(info,final_data1)
+library(caTools)set.seed(1234)
+split = sample.split(final_data2$target_var, SplitRatio = 0.70)
+train_nn = subset(final_data2, split == TRUE)
+test_nn = subset(final_data2, split == FALSE)
+summary(final_data2$target_var)
+table(final_data2$target_var)/nrow(final_data2)
+summary(train_nn$target_var)
+table(train_nn$target_var)/nrow(train_nn)
+summary(test_nn$target_var)
+table(test_nn$target_var)/nrow(test_nn)
+drops1 <- c("cust_num",           "target_var")
+train_nn2<- train_nn[,!names(train_nn) %in% drops1]
+train_nn2_mat<-data.matrix(train_nn2, rownames.force = NA)
+train_y<-subset(train_nn, select=target_var)
+train_y$y0<-ifelse(train_y$target_var==0,1,0)
+train_y$y1<-ifelse(train_y$target_var==1,1,0)
+drop_demo_all <- names(train_y) %in% c("target_var")
+train_y <- train_y[!drop_demo_all]
+train_y1_all<-data.matrix(train_y, rownames.force = NA)
+library(nnet)
+mod.nn<-nnet(train_nn2_mat, train_y1_all, size=12, softmax = FALSE,rang = 0.5, decay = 0.001, maxit = 4000)
+saveRDS(mod.nn, "model_nn_jul17_second_pop.rds")
+t<-readRDS("model_nn_jul17_second_pop.rds")
+train_nn2_mat$predicted.response <- predict(mod.nn,train_nn2_mat)
+pt_xy<-train_nn2_mat$predicted.response
+resp_x1<-as.data.frame(pt_xy)new_y<-subset(train_nn, select=target_var)
+final_pred<-cbind(resp_x1,new_y)
+final_pred$pred<-ifelse(final_pred$y1>=0.008,1,0)
+library(e1071)
+library(caret)
+confusionMatrix(data=final_pred$pred,                reference=final_pred$target_var,                positive='1')
+#              Reference#Prediction      0      1#          0 813547   3042#          1 217162   5208#Accuracy : 0.7881  #Sensitivity : 0.631273        #Specificity : 0.789308  
+AUC <- function(pred,depvar){require(ROCR)  p <- prediction(as.numeric(pred),depvar)  auc<- performance(p,"auc")  auc <- unlist(slot(auc,"y.values"))  return (auc)}
+KS <- function(pred,depvar){require(ROCR)  p <- prediction(as.numeric(pred),depvar)  perf <- performance(p,"tpr","fpr")  ks <- max(attr(perf,"y.values")[[1]]-(attr(perf,"x.values")[[1]]))  return(ks)}
+KS(final_pred$y1,final_pred$target_var)#0.4219833
+AUC(final_pred$y1,final_pred$target_var)#0.7744596
+lift <- function(depvar, predcol, groups=10) {  if(!require(dplyr)){    install.packages("dplyr")    library(dplyr)}  if(is.factor(depvar)) depvar <- as.integer(as.character(depvar))  if(is.factor(predcol)) predcol <- as.integer(as.character(predcol))  helper = data.frame(cbind(depvar, predcol))  helper[,"bucket"] = ntile(helper[,"predcol"], groups)  gaintable = helper %>% group_by(bucket)  %>%    summarise_at(vars(depvar), funs(total = n(),                                    totalresp=sum(., na.rm = TRUE))) %>%    mutate(Cumresp = cumsum(totalresp),           Gain=Cumresp/sum(totalresp)*100,           Cumlift=Gain/(bucket*(100/groups)))  return(gaintable)}
+final_pred <- final_pred[order(final_pred$y1),]
+train_10 = lift(final_pred$target_var, final_pred$y1, groups = 10)
+#............................................. Test ..................................................
+test_nn2<- test_nn[,!names(test_nn) %in% drops1]
+test_nn2_mat<-data.matrix(test_nn2, rownames.force = NA)
+test_y<-subset(test_nn, select=target_var)
+test_y$y0<-ifelse(test_y$target_var==0,1,0)
+test_y$y1<-ifelse(test_y$target_var==1,1,0)
+drop_demo_all <- names(train_y) %in% c("target_var")
+test_y <- test_y[!drop_demo_all]
+test_y1_all<-data.matrix(test_y, rownames.force = NA)
+test_nn2_mat$predicted.response <- predict(mod.nn,test_nn2_mat)
+pt_xy_test<-test_nn2_mat$predicted.response
+resp_x1_test<-as.data.frame(pt_xy_test)new_y_test<-subset(test_nn, select=target_var)
+final_pred_test<-cbind(resp_x1_test,new_y_test)
+final_pred_test$pred<-ifelse(final_pred_test$y1>=0.008,1,0)
+confusionMatrix(data=final_pred_test$pred,                reference=final_pred_test$target_var,                positive='1')
+              # Reference#Prediction      0      1#         0 349149   1389#         1  92583   2146
+#Accuracy : 0.789  #Sensitivity : 0.607072        #Specificity : 0.790409 
+KS(final_pred_test$y1,final_pred_test$target_var)#0.4008593
+AUC(final_pred_test$y1,final_pred_test$target_var)#0.7547638
+final_pred_test <- final_pred_test[order(final_pred_test$y1),]
+test_10 = lift(final_pred_test$target_var, final_pred_test$y1, groups = 10)
+saveRDS(mod.nn, "model_nn_jul17_second_pop.rds")
+t<-readRDS("model_nn_jul17_second_pop.rds")
+library("pmml")
+audit.pmml = pmml(mod.nn)saveXML(audit.pmml, "model_nn_jul17_second_pop.xml")
