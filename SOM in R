@@ -1,4 +1,4 @@
-segment<- dbGetQuery(conn,"select * from sal_staging.seg_data_prep_final")
+segment<- data
 library(kohonen)library(RColorBrewer)library(caret)library(dplyr)
 glimpse(segment)# drop these variables 
 drops <- c("cust_num","tot","sunday_count","monday_count","tuesday_count","wednesday_count","thursday_count",           "friday_count","saturday_count","ovral_reg_num_1","ovral_asset_num_1","ovral_card_num_1","overal_liab_num_1",           "overal_intl_num_1","overal_invst_num_1","overal_add_dtls_num_1","overal_gnrl_num_time_1","overal_error_num_1",           "device","overal_ins_num","overal_ins_time","overal_ins_num_1","ins_time_perc")
